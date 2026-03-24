@@ -64,9 +64,9 @@ docker run -p 8080:8000 atilaahmettaner/tradingview-mcp:latest
 
 Install the package directly:
 ```bash
-uv tool install tradingview-mcp
+uv tool install tradingview-mcp-server
 # or standard pip:
-pip install tradingview-mcp
+pip install tradingview-mcp-server
 ```
 
 **Claude Desktop Configuration:**

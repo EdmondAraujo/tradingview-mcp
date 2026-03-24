@@ -1,5 +1,5 @@
 {
-  "name": "@atilaahmettaner/tradingview-mcp",
+  "name": "@atilaahmettaner/tradingview-mcp-server",
   "version": "0.3.0",
   "description": "AI Trading Intelligence Framework - Advanced multi-agent analysis and real-time market screening",
   "type": "module",
