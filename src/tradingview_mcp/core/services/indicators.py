@@ -820,7 +820,7 @@ def analyze_timeframe_context(indicators: Dict, timeframe: str) -> Dict:
 # Answers: "Which stocks deserve attention?"
 # ---------------------------------------------------------------------------
 
-def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = None) -> Optional[Dict]:
+def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = None, currency: str = "EGP") -> Optional[Dict]:
     """Compute a 100-point composite stock score for ranking.
 
     Sections:
@@ -1070,10 +1070,71 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
         bonus -= 5
         penalties.append(f"RSI {rsi:.0f} extreme overbought (-5)")
 
-    # Penalty: Very low volume
+    # Penalty: Very low relative volume (today vs own average)
     if vol_ratio is not None and vol_ratio < 0.5:
         bonus -= 10
-        penalties.append("Very low liquidity (-10)")
+        penalties.append("Very low relative volume (-10)")
+
+    # ── Liquidity Assessment ──────────────────────────────────────────────
+    avg_vol = vol_sma20 if vol_sma20 and vol_sma20 > 0 else (volume if volume else None)
+    avg_value_20d = (avg_vol * close) if avg_vol and close else None
+    liquidity_ok = True       # passes hard gate for Strong/Elite
+    liquidity_cap = None      # hard grade cap (None = no cap)
+    liquidity_warnings = []
+
+    # Layer 1: Absolute volume penalties
+    if avg_vol is not None:
+        if avg_vol < 10_000:
+            bonus -= 20
+            penalties.append(f"Extremely low volume {avg_vol:,.0f} shares/day (-20)")
+            liquidity_ok = False
+            liquidity_cap = "Avoid"
+            liquidity_warnings.append("near-zero daily activity")
+        elif avg_vol < 50_000:
+            bonus -= 10
+            penalties.append(f"Low volume {avg_vol:,.0f} shares/day (-10)")
+            liquidity_ok = False
+            liquidity_cap = "Watchlist"
+            liquidity_warnings.append("thin daily volume")
+        elif avg_vol < 100_000:
+            bonus -= 5
+            penalties.append(f"Below-average volume {avg_vol:,.0f} shares/day (-5)")
+
+    # Layer 2: Traded value penalty (volume * price)
+    # Catches stocks with high share count but low price, or vice versa
+    # USD-denominated stocks use ~50x lower thresholds (1 USD ≈ 50 EGP)
+    if currency.upper() == "USD":
+        val_floor, val_low, val_modest = 2_000, 10_000, 20_000
+    else:
+        val_floor, val_low, val_modest = 100_000, 500_000, 1_000_000
+    ccy = currency.upper()
+
+    if avg_value_20d is not None:
+        if avg_value_20d < val_floor:
+            bonus -= 15
+            penalties.append(f"Very low traded value {avg_value_20d:,.0f} {ccy}/day (-15)")
+            liquidity_ok = False
+            if liquidity_cap != "Avoid":
+                liquidity_cap = "Avoid"
+            liquidity_warnings.append("negligible monetary turnover")
+        elif avg_value_20d < val_low:
+            bonus -= 8
+            penalties.append(f"Low traded value {avg_value_20d:,.0f} {ccy}/day (-8)")
+            liquidity_ok = False
+            if liquidity_cap is None:
+                liquidity_cap = "Watchlist"
+            liquidity_warnings.append("low monetary turnover")
+        elif avg_value_20d < val_modest:
+            bonus -= 3
+            penalties.append(f"Modest traded value {avg_value_20d:,.0f} {ccy}/day (-3)")
+
+    # Layer 3: Zero current volume — today is dead
+    if volume is not None and volume == 0:
+        bonus -= 10
+        penalties.append("Zero volume today — no trading activity (-10)")
+        liquidity_ok = False
+        liquidity_cap = "Avoid"
+        liquidity_warnings.append("zero trades today")
 
     # Penalty: ADX weak + bearish DI
     if adx is not None and adx < 15 and adx_plus and adx_minus and adx_minus > adx_plus:
@@ -1082,7 +1143,8 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
 
     total = max(0, min(100, total + bonus))
 
-    # ── Grade ─────────────────────────────────────────────────────────────
+    # ── Grade (with hard liquidity gate) ──────────────────────────────────
+    grade_order = ["Avoid", "Watchlist", "Strong", "Elite"]
     if total >= 85:
         grade = "Elite"
     elif total >= 70:
@@ -1091,6 +1153,12 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
         grade = "Watchlist"
     else:
         grade = "Avoid"
+
+    # Hard cap: illiquid stocks cannot be graded above their liquidity cap
+    if liquidity_cap and grade_order.index(grade) > grade_order.index(liquidity_cap):
+        original_grade = grade
+        grade = liquidity_cap
+        penalties.append(f"Grade capped {original_grade} → {grade} (insufficient liquidity)")
 
     # Trend state
     if ema20 and ema50 and ema200:
@@ -1115,6 +1183,13 @@ def compute_stock_score(indicators: Dict, change_pct_rank: Optional[float] = Non
         "breakdown": breakdown,
         "signals": signals,
         "penalties": penalties,
+        "liquidity": {
+            "avg_volume_20d": round(avg_vol) if avg_vol else 0,
+            "avg_value_20d": round(avg_value_20d) if avg_value_20d else 0,
+            "current_volume": round(volume) if volume else 0,
+            "liquidity_ok": liquidity_ok,
+            "warnings": liquidity_warnings,
+        },
     }
 
 
