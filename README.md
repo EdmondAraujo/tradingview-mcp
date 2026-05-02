@@ -25,6 +25,11 @@ Backtesting + Live Sentiment + Yahoo Finance + 30+ Technical Analysis Tools — 
   <img src="https://img.shields.io/badge/💎_Pro_($30)-Sponsor-gold?style=for-the-badge&logo=github-sponsors" alt="Sponsor $30"/>
 </a>
 
+> **🚀 Don't want to fight `uv`/`pandas`/Python on Windows?**  
+> [**pro.cryptosieve.com**](https://pro.cryptosieve.com) — same 27 tools,  
+> one connector URL into Claude.ai,Chatgpt, Copilot, Cursor **$9/month** with 7-day free trial.  
+> Self-hosting is free and always will be; the hosted version is just for  
+> folks who'd rather skip the ops dance.
 ---
 
 ## 🎥 Framework Demo
